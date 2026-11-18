@@ -8,13 +8,14 @@ import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.systems.modules.Modules;
+import meteordevelopment.meteorclient.systems.modules.movement.elytrafly.ElytraFly;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
@@ -22,17 +23,10 @@ import net.minecraft.util.math.Vec3d;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 public class SpearKill extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
-
-    private final Setting<Double> speed = sgGeneral.add(new DoubleSetting.Builder()
-        .name("speed")
-        .description("Flight speed in blocks per tick.")
-        .defaultValue(1.0)
-        .min(0.1)
-        .sliderMax(3.0)
-        .build());
 
     private final Setting<Double> range = sgGeneral.add(new DoubleSetting.Builder()
         .name("range")
@@ -58,7 +52,7 @@ public class SpearKill extends Module {
         .sliderMax(20)
         .build());
 
-    private final Setting<java.util.Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
+    private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
         .name("entities")
         .description("Entities to target.")
         .defaultValue(EntityType.PLAYER)
@@ -68,26 +62,47 @@ public class SpearKill extends Module {
     private Vec3d lastDir = new Vec3d(0, 0, 1);
     private int passThroughLeft = 0;
     private int cooldown = 0;
+    private boolean enabledElytraFly = false;
 
     public SpearKill() {
         super(AddonTemplate.CATEGORY, "spear-kill",
-            "Elytra spear: locks onto targets and flies through them repeatedly.");
+            "Elytra spear using Meteor's ElytraFly: locks onto targets and flies through them repeatedly.");
     }
 
     @Override
     public void onActivate() {
         resetState();
+
+        ElytraFly elytraFly = Modules.get().get(ElytraFly.class);
+        if (elytraFly != null && !elytraFly.isActive()) {
+            elytraFly.toggle();
+            enabledElytraFly = true;
+        }
     }
 
     @Override
     public void onDeactivate() {
+        releaseKeys();
         resetState();
+
+        if (enabledElytraFly) {
+            ElytraFly elytraFly = Modules.get().get(ElytraFly.class);
+            if (elytraFly != null && elytraFly.isActive()) elytraFly.toggle();
+            enabledElytraFly = false;
+        }
     }
 
     private void resetState() {
         target = null;
         passThroughLeft = 0;
         cooldown = 0;
+    }
+
+    private void releaseKeys() {
+        if (mc.options == null) return;
+        mc.options.forwardKey.setPressed(false);
+        mc.options.jumpKey.setPressed(false);
+        mc.options.sneakKey.setPressed(false);
     }
 
     @EventHandler
@@ -103,18 +118,15 @@ public class SpearKill extends Module {
             return;
         }
 
-        // Make sure we are gliding (the server must be told too)
         if (!player.isGliding()) {
-            if (player.isOnGround()) return; // wait until the player jumps
-            player.startGliding();
-            player.networkHandler.sendPacket(
-                new ClientCommandC2SPacket(player, ClientCommandC2SPacket.Mode.START_FALL_FLYING));
+            releaseKeys();
+            return;
         }
 
-        // Keep flying straight for a few ticks after a hit so we pass through the target
         if (passThroughLeft > 0) {
             passThroughLeft--;
-            player.setVelocity(lastDir.multiply(speed.get()));
+            aim(player, lastDir);
+            mc.options.forwardKey.setPressed(true);
             return;
         }
 
@@ -133,7 +145,9 @@ public class SpearKill extends Module {
         lastDir = dir;
 
         aim(player, dir);
-        player.setVelocity(dir.multiply(speed.get()));
+        mc.options.forwardKey.setPressed(true);
+        mc.options.jumpKey.setPressed(to.y > 1.5);
+        mc.options.sneakKey.setPressed(to.y < -1.5);
 
         if (player.squaredDistanceTo(target) <= 9.0 && cooldown == 0 && mc.interactionManager != null) {
             mc.interactionManager.attackEntity(player, target);
