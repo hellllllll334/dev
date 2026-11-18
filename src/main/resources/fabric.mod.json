@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "behind_qou_spear",
+  "version": "${version}",
+  "name": "Behind QOU Spear Kill",
+  "description": "Meteor addon: elytra spear module that locks onto targets and flies through them repeatedly.",
+  "authors": [
+    "Notrack"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "com.behindqou.spear.AddonTemplate"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "meteor-client": "*"
+  }
+}
